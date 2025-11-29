@@ -1,0 +1,221 @@
+package com.trainig.articletrainer.viewmodel
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.trainig.articletrainer.data.CsvParser
+import com.trainig.articletrainer.data.NounEntry
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+/**
+ * ViewModel managing the German Articles Trainer quiz state.
+ *
+ * Handles:
+ * - Loading nouns from CSV
+ * - Quiz state management
+ * - Tracking correct/incorrect answers
+ * - Managing failed words for practice rounds
+ * - Preserving state across configuration changes
+ */
+class QuizViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val csvParser = CsvParser()
+
+    // All nouns loaded from CSV
+    private var allNouns: List<NounEntry> = emptyList()
+
+    // UI State
+    private val _uiState = MutableStateFlow<QuizUiState>(QuizUiState.Loading)
+    val uiState: StateFlow<QuizUiState> = _uiState.asStateFlow()
+
+    init {
+        loadNouns()
+    }
+
+    /**
+     * Load nouns from CSV file in assets.
+     */
+    private fun loadNouns() {
+        viewModelScope.launch {
+            try {
+                allNouns = csvParser.parseFromAssets(getApplication())
+                _uiState.value = QuizUiState.Start(maxWords = allNouns.size)
+            } catch (e: Exception) {
+                _uiState.value = QuizUiState.Error("Failed to load nouns: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Start a new quiz with N random words.
+     */
+    fun startQuiz(wordCount: Int) {
+        val selectedNouns = allNouns.shuffled().take(wordCount)
+        startQuizWithNouns(selectedNouns, isRetryRound = false)
+    }
+
+    /**
+     * Start quiz with specific nouns (used for failed words practice).
+     */
+    private fun startQuizWithNouns(nouns: List<NounEntry>, isRetryRound: Boolean) {
+        if (nouns.isEmpty()) {
+            _uiState.value = QuizUiState.Start(maxWords = allNouns.size)
+            return
+        }
+
+        _uiState.value = QuizUiState.Quiz(
+            currentIndex = 0,
+            nouns = nouns,
+            correctCount = 0,
+            incorrectCount = 0,
+            failedNouns = emptySet(),
+            showHint = false,
+            answerFeedback = null,
+            originalNouns = if (isRetryRound) {
+                ((_uiState.value as? QuizUiState.Result)?.originalNouns ?: nouns)
+            } else {
+                nouns
+            }
+        )
+    }
+
+    /**
+     * Toggle hint visibility for current word.
+     */
+    fun toggleHint() {
+        val currentState = _uiState.value as? QuizUiState.Quiz ?: return
+        _uiState.value = currentState.copy(showHint = !currentState.showHint)
+    }
+
+    /**
+     * Submit an answer for the current word.
+     */
+    fun submitAnswer(selectedArticle: String) {
+        val currentState = _uiState.value as? QuizUiState.Quiz ?: return
+
+        // Prevent double submission
+        if (currentState.answerFeedback != null) return
+
+        val currentNoun = currentState.nouns[currentState.currentIndex]
+        val isCorrect = selectedArticle == currentNoun.article
+
+        val newCorrectCount = if (isCorrect) currentState.correctCount + 1 else currentState.correctCount
+        val newIncorrectCount = if (isCorrect) currentState.incorrectCount else currentState.incorrectCount + 1
+        val newFailedNouns = if (isCorrect) {
+            currentState.failedNouns
+        } else {
+            currentState.failedNouns + currentNoun
+        }
+
+        // Update state with feedback
+        _uiState.value = currentState.copy(
+            correctCount = newCorrectCount,
+            incorrectCount = newIncorrectCount,
+            failedNouns = newFailedNouns,
+            answerFeedback = AnswerFeedback(isCorrect, currentNoun.article)
+        )
+    }
+
+    /**
+     * Move to next word (called after delay).
+     */
+    fun moveToNext() {
+        val currentState = _uiState.value as? QuizUiState.Quiz ?: return
+
+        val nextIndex = currentState.currentIndex + 1
+
+        if (nextIndex >= currentState.nouns.size) {
+            // Quiz finished, show results
+            _uiState.value = QuizUiState.Result(
+                correctCount = currentState.correctCount,
+                incorrectCount = currentState.incorrectCount,
+                failedNouns = currentState.failedNouns.toList(),
+                originalNouns = currentState.originalNouns
+            )
+        } else {
+            // Move to next word
+            _uiState.value = currentState.copy(
+                currentIndex = nextIndex,
+                showHint = false,
+                answerFeedback = null
+            )
+        }
+    }
+
+    /**
+     * Practice failed words from the last round.
+     */
+    fun practiceFailedWords() {
+        val resultState = _uiState.value as? QuizUiState.Result ?: return
+        startQuizWithNouns(resultState.failedNouns, isRetryRound = true)
+    }
+
+    /**
+     * Return to start screen.
+     */
+    fun returnToStart() {
+        _uiState.value = QuizUiState.Start(maxWords = allNouns.size)
+    }
+}
+
+/**
+ * Sealed class representing different UI states.
+ */
+sealed class QuizUiState {
+    object Loading : QuizUiState()
+    data class Error(val message: String) : QuizUiState()
+    data class Start(val maxWords: Int) : QuizUiState()
+
+    data class Quiz(
+        val currentIndex: Int,
+        val nouns: List<NounEntry>,
+        val correctCount: Int,
+        val incorrectCount: Int,
+        val failedNouns: Set<NounEntry>,
+        val showHint: Boolean,
+        val answerFeedback: AnswerFeedback?,
+        val originalNouns: List<NounEntry> // Track original selection for final screen
+    ) : QuizUiState() {
+        val currentNoun: NounEntry
+            get() = nouns[currentIndex]
+
+        val totalWords: Int
+            get() = nouns.size
+
+        val progress: String
+            get() = "Word ${currentIndex + 1} of $totalWords"
+    }
+
+    data class Result(
+        val correctCount: Int,
+        val incorrectCount: Int,
+        val failedNouns: List<NounEntry>,
+        val originalNouns: List<NounEntry>
+    ) : QuizUiState() {
+        val totalAnswers: Int
+            get() = correctCount + incorrectCount
+
+        val successRate: Int
+            get() = if (totalAnswers > 0) {
+                ((correctCount.toFloat() / totalAnswers) * 100).toInt()
+            } else 0
+
+        val hasFailedWords: Boolean
+            get() = failedNouns.isNotEmpty()
+
+        val isComplete: Boolean
+            get() = failedNouns.isEmpty()
+    }
+}
+
+/**
+ * Feedback shown after answering.
+ */
+data class AnswerFeedback(
+    val isCorrect: Boolean,
+    val correctArticle: String
+)
+
