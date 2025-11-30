@@ -7,7 +7,7 @@ import java.io.InputStreamReader
 /**
  * CSV Parser for German nouns.
  *
- * Parses CSV from assets/german_nouns.csv with format:
+ * Parses CSV from assets/german_nouns_a1.csv with format:
  * german,german example,english,english example
  *
  * The German column contains the article and noun, e.g.:
@@ -24,7 +24,7 @@ class CsvParser {
     /**
      * Parse the CSV file from assets and return a list of NounEntry objects.
      */
-    fun parseFromAssets(context: Context, fileName: String = "german_nouns.csv"): List<NounEntry> {
+    fun parseFromAssets(context: Context, fileName: String = "german_nouns_a1.csv"): List<NounEntry> {
         val entries = mutableListOf<NounEntry>()
 
         try {

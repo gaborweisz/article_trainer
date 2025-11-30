@@ -50,8 +50,12 @@ fun ArticleTrainerApp(
         is QuizUiState.Start -> {
             StartScreen(
                 maxWords = state.maxWords,
-                onStartQuiz = { wordCount ->
-                    viewModel.startQuiz(wordCount)
+                currentLevel = state.currentLevel,
+                onLevelChanged = { level ->
+                    viewModel.changeLevel(level)
+                },
+                onStartQuiz = { wordCount, level ->
+                    viewModel.startQuiz(wordCount, level)
                 }
             )
         }

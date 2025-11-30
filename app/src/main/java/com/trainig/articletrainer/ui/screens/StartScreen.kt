@@ -12,14 +12,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Start screen where user selects how many words to practice.
+ * Start screen where user selects language level and how many words to practice.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StartScreen(
     maxWords: Int,
-    onStartQuiz: (Int) -> Unit
+    currentLevel: String,
+    onLevelChanged: (String) -> Unit,
+    onStartQuiz: (Int, String) -> Unit
 ) {
     var wordCount by remember { mutableStateOf("20") }
+    var expanded by remember { mutableStateOf(false) }
+    var selectedLevel by remember(currentLevel) { mutableStateOf(currentLevel) }
+
+    val levels = listOf("A1", "A2")
 
     Column(
         modifier = Modifier
@@ -36,6 +43,51 @@ fun StartScreen(
         )
 
         Spacer(modifier = Modifier.height(48.dp))
+
+        // Language Level Selector
+        Text(
+            text = "Select Language Level",
+            style = MaterialTheme.typography.bodyLarge,
+            fontSize = 18.sp
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+            modifier = Modifier.width(200.dp)
+        ) {
+            OutlinedTextField(
+                value = selectedLevel,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Level") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                levels.forEach { level ->
+                    DropdownMenuItem(
+                        text = { Text(level) },
+                        onClick = {
+                            selectedLevel = level
+                            expanded = false
+                            onLevelChanged(level)
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         Text(
             text = "How many words do you want to guess?",
@@ -73,7 +125,7 @@ fun StartScreen(
             onClick = {
                 val count = wordCount.toIntOrNull() ?: 20
                 val validCount = count.coerceIn(1, maxWords)
-                onStartQuiz(validCount)
+                onStartQuiz(validCount, selectedLevel)
             },
             modifier = Modifier
                 .width(200.dp)
@@ -87,4 +139,3 @@ fun StartScreen(
         }
     }
 }
-

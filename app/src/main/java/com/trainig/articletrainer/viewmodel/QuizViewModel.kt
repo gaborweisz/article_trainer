@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
  * ViewModel managing the German Articles Trainer quiz state.
  *
  * Handles:
- * - Loading nouns from CSV
+ * - Loading nouns from CSV based on selected level
  * - Quiz state management
  * - Tracking correct/incorrect answers
  * - Managing failed words for practice rounds
@@ -27,34 +27,72 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
     // All nouns loaded from CSV
     private var allNouns: List<NounEntry> = emptyList()
 
+    // Current language level
+    private var currentLevel: String = "A1"
+
     // UI State
     private val _uiState = MutableStateFlow<QuizUiState>(QuizUiState.Loading)
     val uiState: StateFlow<QuizUiState> = _uiState.asStateFlow()
 
     init {
-        loadNouns()
+        loadNouns(currentLevel)
     }
 
     /**
-     * Load nouns from CSV file in assets.
+     * Load nouns from CSV file in assets based on language level.
      */
-    private fun loadNouns() {
+    private fun loadNouns(level: String) {
         viewModelScope.launch {
             try {
-                allNouns = csvParser.parseFromAssets(getApplication())
-                _uiState.value = QuizUiState.Start(maxWords = allNouns.size)
+                currentLevel = level
+                val fileName = "german_nouns_${level.lowercase()}.csv"
+                android.util.Log.d("QuizViewModel", "Loading nouns from: $fileName")
+                allNouns = csvParser.parseFromAssets(getApplication(), fileName)
+                android.util.Log.d("QuizViewModel", "Loaded ${allNouns.size} nouns from $fileName")
+                _uiState.value = QuizUiState.Start(maxWords = allNouns.size, currentLevel = currentLevel)
             } catch (e: Exception) {
+                android.util.Log.e("QuizViewModel", "Error loading nouns", e)
                 _uiState.value = QuizUiState.Error("Failed to load nouns: ${e.message}")
             }
         }
     }
 
     /**
+     * Change language level and reload nouns.
+     */
+    fun changeLevel(level: String) {
+        if (level != currentLevel) {
+            _uiState.value = QuizUiState.Loading
+            loadNouns(level)
+        }
+    }
+
+    /**
      * Start a new quiz with N random words.
      */
-    fun startQuiz(wordCount: Int) {
-        val selectedNouns = allNouns.shuffled().take(wordCount)
-        startQuizWithNouns(selectedNouns, isRetryRound = false)
+    fun startQuiz(wordCount: Int, level: String) {
+        android.util.Log.d("QuizViewModel", "startQuiz called with wordCount=$wordCount, level=$level, currentLevel=$currentLevel")
+        // If level changed, reload nouns first
+        if (level != currentLevel) {
+            viewModelScope.launch {
+                try {
+                    currentLevel = level
+                    val fileName = "german_nouns_${level.lowercase()}.csv"
+                    android.util.Log.d("QuizViewModel", "Level changed, loading from: $fileName")
+                    allNouns = csvParser.parseFromAssets(getApplication(), fileName)
+                    android.util.Log.d("QuizViewModel", "Loaded ${allNouns.size} nouns, selecting $wordCount")
+                    val selectedNouns = allNouns.shuffled().take(wordCount)
+                    startQuizWithNouns(selectedNouns, isRetryRound = false)
+                } catch (e: Exception) {
+                    android.util.Log.e("QuizViewModel", "Error in startQuiz", e)
+                    _uiState.value = QuizUiState.Error("Failed to load nouns: ${e.message}")
+                }
+            }
+        } else {
+            android.util.Log.d("QuizViewModel", "Using cached nouns: ${allNouns.size}")
+            val selectedNouns = allNouns.shuffled().take(wordCount)
+            startQuizWithNouns(selectedNouns, isRetryRound = false)
+        }
     }
 
     /**
@@ -62,7 +100,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun startQuizWithNouns(nouns: List<NounEntry>, isRetryRound: Boolean) {
         if (nouns.isEmpty()) {
-            _uiState.value = QuizUiState.Start(maxWords = allNouns.size)
+            _uiState.value = QuizUiState.Start(maxWords = allNouns.size, currentLevel = currentLevel)
             return
         }
 
@@ -157,7 +195,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
      * Return to start screen.
      */
     fun returnToStart() {
-        _uiState.value = QuizUiState.Start(maxWords = allNouns.size)
+        _uiState.value = QuizUiState.Start(maxWords = allNouns.size, currentLevel = currentLevel)
     }
 }
 
@@ -167,7 +205,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 sealed class QuizUiState {
     object Loading : QuizUiState()
     data class Error(val message: String) : QuizUiState()
-    data class Start(val maxWords: Int) : QuizUiState()
+    data class Start(val maxWords: Int, val currentLevel: String) : QuizUiState()
 
     data class Quiz(
         val currentIndex: Int,
@@ -218,4 +256,3 @@ data class AnswerFeedback(
     val isCorrect: Boolean,
     val correctArticle: String
 )
-
