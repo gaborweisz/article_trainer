@@ -46,6 +46,7 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
             "A1" -> "german_nouns_a1.csv"
             "A2" -> "german_nouns_a2.csv"
             "animals_a2" -> "german_animals_a2.csv"
+            "body_parts" -> "german_body_parts.csv"
             else -> "german_nouns_${levelKey.lowercase()}.csv"
         }
     }
@@ -264,4 +265,3 @@ data class AnswerFeedback(
     val isCorrect: Boolean,
     val correctArticle: String
 )
-

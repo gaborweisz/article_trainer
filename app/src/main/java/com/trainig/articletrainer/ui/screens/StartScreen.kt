@@ -28,7 +28,8 @@ fun StartScreen(
     val levelOptions = listOf(
         "A1 basic nouns (360)" to "A1",
         "A2 basic nouns (560)" to "A2",
-        "Animals only (90)"    to "animals_a2"
+        "Animals only (90)"    to "animals_a2",
+        "Body parts (50)"      to "body_parts"
     )
 
     var selectedDisplay by remember(currentLevel) {
