@@ -19,35 +19,56 @@ import kotlinx.coroutines.launch
  * - Tracking correct/incorrect answers
  * - Managing failed words for practice rounds
  * - Preserving state across configuration changes
- *
- * Handles:
- * - Loading nouns from CSV based on selected level
- * - Quiz state management
- * - Tracking correct/incorrect answers
- * - Managing failed words for practice rounds
- * - Preserving state across configuration changes
  */
-    // Current language level
+class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
     private val csvParser = CsvParser()
 
     // All nouns loaded from CSV
     private var allNouns: List<NounEntry> = emptyList()
 
-    // Current language level
+    // Current language level key (e.g. "A1", "A2", "animals_a2")
     private var currentLevel: String = "A1"
 
     // UI State
+    private val _uiState = MutableStateFlow<QuizUiState>(QuizUiState.Loading)
+    val uiState: StateFlow<QuizUiState> = _uiState.asStateFlow()
+
+    init {
+        loadNouns(currentLevel)
+    }
+
+    /**
+     * Map a level key to an asset filename.
+     */
+    private fun mapLevelToFile(levelKey: String): String {
+        return when (levelKey) {
+            "A1" -> "german_nouns_a1.csv"
+            "A2" -> "german_nouns_a2.csv"
+            "animals_a2" -> "german_animals_a2.csv"
+            else -> "german_nouns_${levelKey.lowercase()}.csv"
+        }
+    }
+
+    /**
+     * Load nouns from CSV file in assets based on language level.
+     * Sets currentLevel only after a successful load to avoid race conditions.
+     */
+    private fun loadNouns(level: String) {
+        viewModelScope.launch {
             try {
-                currentLevel = level
+                val fileName = mapLevelToFile(level)
                 android.util.Log.d("QuizViewModel", "Loading nouns from: $fileName")
-                allNouns = csvParser.parseFromAssets(getApplication(), fileName)
+                val parsed = csvParser.parseFromAssets(getApplication(), fileName)
+                allNouns = parsed
+                currentLevel = level
                 android.util.Log.d("QuizViewModel", "Loaded ${allNouns.size} nouns from $fileName")
                 _uiState.value = QuizUiState.Start(maxWords = allNouns.size, currentLevel = currentLevel)
-                currentLevel = level
-                val fileName = "german_nouns_${level.lowercase()}.csv"
+            } catch (e: Exception) {
                 android.util.Log.e("QuizViewModel", "Error loading nouns", e)
-                allNouns = csvParser.parseFromAssets(getApplication(), fileName)
+                _uiState.value = QuizUiState.Error("Failed to load nouns: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -65,21 +86,22 @@ import kotlinx.coroutines.launch
      */
     fun startQuiz(wordCount: Int, level: String) {
         android.util.Log.d("QuizViewModel", "startQuiz called with wordCount=$wordCount, level=$level, currentLevel=$currentLevel")
-        // If level changed, reload nouns first
-        if (level != currentLevel) {
+        if (level != currentLevel || allNouns.isEmpty()) {
             viewModelScope.launch {
                 try {
+                    val fileName = mapLevelToFile(level)
+                    android.util.Log.d("QuizViewModel", "Loading (startQuiz) from: $fileName")
+                    val parsed = csvParser.parseFromAssets(getApplication(), fileName)
+                    allNouns = parsed
                     currentLevel = level
-                    val fileName = "german_nouns_${level.lowercase()}.csv"
-                    android.util.Log.d("QuizViewModel", "Level changed, loading from: $fileName")
-        // If level changed, reload nouns first
-        if (level != currentLevel) {
+                    android.util.Log.d("QuizViewModel", "Loaded ${allNouns.size} nouns, selecting $wordCount")
                     val selectedNouns = allNouns.shuffled().take(wordCount)
                     startQuizWithNouns(selectedNouns, isRetryRound = false)
+                } catch (e: Exception) {
+                    android.util.Log.e("QuizViewModel", "Error in startQuiz", e)
+                    _uiState.value = QuizUiState.Error("Failed to load nouns: ${e.message}")
+                }
             }
-                    val fileName = "german_nouns_${level.lowercase()}.csv"
-                    android.util.Log.d("QuizViewModel", "Level changed, loading from: $fileName")
-                    allNouns = csvParser.parseFromAssets(getApplication(), fileName)
         } else {
             android.util.Log.d("QuizViewModel", "Using cached nouns: ${allNouns.size}")
             val selectedNouns = allNouns.shuffled().take(wordCount)
@@ -125,8 +147,6 @@ import kotlinx.coroutines.launch
      */
     fun submitAnswer(selectedArticle: String) {
         val currentState = _uiState.value as? QuizUiState.Quiz ?: return
-
-        // Prevent double submission
         if (currentState.answerFeedback != null) return
 
         val currentNoun = currentState.nouns[currentState.currentIndex]
@@ -140,7 +160,6 @@ import kotlinx.coroutines.launch
             currentState.failedNouns + currentNoun
         }
 
-        // Update state with feedback
         _uiState.value = currentState.copy(
             correctCount = newCorrectCount,
             incorrectCount = newIncorrectCount,
@@ -154,11 +173,9 @@ import kotlinx.coroutines.launch
      */
     fun moveToNext() {
         val currentState = _uiState.value as? QuizUiState.Quiz ?: return
-
         val nextIndex = currentState.currentIndex + 1
 
         if (nextIndex >= currentState.nouns.size) {
-            // Quiz finished, show results
             _uiState.value = QuizUiState.Result(
                 correctCount = currentState.correctCount,
                 incorrectCount = currentState.incorrectCount,
@@ -166,7 +183,6 @@ import kotlinx.coroutines.launch
                 originalNouns = currentState.originalNouns
             )
         } else {
-            // Move to next word
             _uiState.value = currentState.copy(
                 currentIndex = nextIndex,
                 showHint = false,
@@ -207,7 +223,7 @@ sealed class QuizUiState {
         val failedNouns: Set<NounEntry>,
         val showHint: Boolean,
         val answerFeedback: AnswerFeedback?,
-        val originalNouns: List<NounEntry> // Track original selection for final screen
+        val originalNouns: List<NounEntry>
     ) : QuizUiState() {
         val currentNoun: NounEntry
             get() = nouns[currentIndex]
@@ -248,3 +264,4 @@ data class AnswerFeedback(
     val isCorrect: Boolean,
     val correctArticle: String
 )
+

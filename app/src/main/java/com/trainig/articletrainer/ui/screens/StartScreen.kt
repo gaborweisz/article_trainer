@@ -24,9 +24,16 @@ fun StartScreen(
 ) {
     var wordCount by remember { mutableStateOf("20") }
     var expanded by remember { mutableStateOf(false) }
-    var selectedLevel by remember(currentLevel) { mutableStateOf(currentLevel) }
 
-    val levels = listOf("A1", "A2")
+    val levelOptions = listOf(
+        "A1 basic nouns (360)" to "A1",
+        "A2 basic nouns (560)" to "A2",
+        "Animals only (90)"    to "animals_a2"
+    )
+
+    var selectedDisplay by remember(currentLevel) {
+        mutableStateOf(levelOptions.find { it.second == currentLevel }?.first ?: "A1 basic nouns (360)")
+    }
 
     Column(
         modifier = Modifier
@@ -46,7 +53,7 @@ fun StartScreen(
 
         // Language Level Selector
         Text(
-            text = "Select Language Level",
+            text = "Select Dictionary",
             style = MaterialTheme.typography.bodyLarge,
             fontSize = 18.sp
         )
@@ -56,17 +63,17 @@ fun StartScreen(
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = !expanded },
-            modifier = Modifier.width(200.dp)
+            modifier = Modifier.width(260.dp)
         ) {
             OutlinedTextField(
-                value = selectedLevel,
+                value = selectedDisplay,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Level") },
+                label = { Text("Dictionary") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                 modifier = Modifier
-                    .menuAnchor()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                     .fillMaxWidth()
             )
 
@@ -74,13 +81,13 @@ fun StartScreen(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
-                levels.forEach { level ->
+                levelOptions.forEach { (display, key) ->
                     DropdownMenuItem(
-                        text = { Text(level) },
+                        text = { Text(display) },
                         onClick = {
-                            selectedLevel = level
+                            selectedDisplay = display
                             expanded = false
-                            onLevelChanged(level)
+                            onLevelChanged(key)
                         }
                     )
                 }
@@ -108,7 +115,7 @@ fun StartScreen(
             label = { Text("Number of words") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
-            modifier = Modifier.width(200.dp)
+            modifier = Modifier.width(260.dp)
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -125,7 +132,8 @@ fun StartScreen(
             onClick = {
                 val count = wordCount.toIntOrNull() ?: 20
                 val validCount = count.coerceIn(1, maxWords)
-                onStartQuiz(validCount, selectedLevel)
+                val selectedKey = levelOptions.find { it.first == selectedDisplay }?.second ?: "A1"
+                onStartQuiz(validCount, selectedKey)
             },
             modifier = Modifier
                 .width(200.dp)
