@@ -3,6 +3,7 @@ package com.trainig.articletrainer.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -28,8 +29,33 @@ fun QuizScreen(
     answerFeedback: AnswerFeedback?,
     onToggleHint: () -> Unit,
     onAnswerSelected: (String) -> Unit,
-    onMoveToNext: () -> Unit
+    onMoveToNext: () -> Unit,
+    onBackToStart: () -> Unit
 ) {
+    var showBackDialog by remember { mutableStateOf(false) }
+
+    // Confirmation dialog
+    if (showBackDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackDialog = false },
+            title = { Text("Back to main page?") },
+            text = { Text("Your current progress will be lost.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBackDialog = false
+                    onBackToStart()
+                }) {
+                    Text("Yes", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackDialog = false }) {
+                    Text("No")
+                }
+            }
+        )
+    }
+
     // Auto-advance to next word after feedback is shown
     LaunchedEffect(answerFeedback) {
         if (answerFeedback != null) {
@@ -44,13 +70,28 @@ fun QuizScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Progress indicator
-        Text(
-            text = progress,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold
-        )
+        // Top bar: back arrow (left) + progress (center)
+        Box(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            IconButton(
+                onClick = { showBackDialog = true },
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back to main page",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = progress,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -227,4 +268,3 @@ fun FeedbackSection(feedback: AnswerFeedback) {
         }
     }
 }
-

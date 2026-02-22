@@ -67,7 +67,8 @@ fun ArticleTrainerApp(
                 answerFeedback = state.answerFeedback,
                 onToggleHint = { viewModel.toggleHint() },
                 onAnswerSelected = { article -> viewModel.submitAnswer(article) },
-                onMoveToNext = { viewModel.moveToNext() }
+                onMoveToNext = { viewModel.moveToNext() },
+                onBackToStart = { viewModel.returnToStart() }
             )
         }
         is QuizUiState.Result -> {
