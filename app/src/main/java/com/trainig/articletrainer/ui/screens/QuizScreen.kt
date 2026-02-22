@@ -1,5 +1,6 @@
 package com.trainig.articletrainer.ui.screens
 
+import android.speech.tts.TextToSpeech
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -11,12 +12,37 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.trainig.articletrainer.data.NounEntry
 import com.trainig.articletrainer.viewmodel.AnswerFeedback
 import kotlinx.coroutines.delay
+import java.util.Locale
+
+/**
+ * Initialises a TextToSpeech engine set to German and releases it when the
+ * composable leaves the composition.
+ */
+@Composable
+fun rememberTextToSpeech(): TextToSpeech {
+    val context = LocalContext.current
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+
+    DisposableEffect(context) {
+        val engine = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale.GERMAN
+            }
+        }
+        tts = engine
+        engine.language = Locale.GERMAN
+        onDispose { engine.shutdown() }
+    }
+
+    return tts ?: TextToSpeech(context) {}
+}
 
 /**
  * Quiz screen showing the current noun and article buttons.
@@ -33,6 +59,7 @@ fun QuizScreen(
     onBackToStart: () -> Unit
 ) {
     var showBackDialog by remember { mutableStateOf(false) }
+    val tts = rememberTextToSpeech()
 
     // Confirmation dialog
     if (showBackDialog) {
@@ -44,14 +71,10 @@ fun QuizScreen(
                 TextButton(onClick = {
                     showBackDialog = false
                     onBackToStart()
-                }) {
-                    Text("Yes", fontWeight = FontWeight.Bold)
-                }
+                }) { Text("Yes", fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { showBackDialog = false }) {
-                    Text("No")
-                }
+                TextButton(onClick = { showBackDialog = false }) { Text("No") }
             }
         )
     }
@@ -71,9 +94,7 @@ fun QuizScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Top bar: back arrow (left) + progress (center)
-        Box(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             IconButton(
                 onClick = { showBackDialog = true },
                 modifier = Modifier.align(Alignment.CenterStart)
@@ -106,12 +127,30 @@ fun QuizScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Hint button
+        // Show Hint button
         OutlinedButton(
             onClick = onToggleHint,
             enabled = answerFeedback == null
         ) {
             Text(text = if (showHint) "Hide Hint" else "Show Hint")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Pronounce button – speaks the example sentence when hint is shown, otherwise the noun
+        OutlinedButton(
+            onClick = {
+                val textToSpeak = if (showHint) currentNoun.germanExample else currentNoun.fullGermanNoun
+                tts.speak(
+                    textToSpeak,
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "pronunciation"
+                )
+            },
+            enabled = answerFeedback == null
+        ) {
+            Text(text = if (showHint) "🔊  Pronounce sentence" else "🔊  Pronounce")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -126,9 +165,7 @@ fun QuizScreen(
                     containerColor = MaterialTheme.colorScheme.secondaryContainer
                 )
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         text = "German Example:",
                         fontWeight = FontWeight.Bold,
